@@ -28,6 +28,12 @@ instead of failing the build, so CI and co-authors need no Wolfram tooling.
 Authoring helpers (no MyST involved):
     plugins/wolfram.py --scaffold nb.nb          extract a .nb into an editable
                                                  MyST page (needs wolframscript)
+                                                 TeX-assistant equations become
+                                                 LaTeX ($...$ inline, {math}
+                                                 blocks for equation-only
+                                                 cells); opaque box payloads
+                                                 (GraphicsBox, CompressedData,
+                                                 FrameBox, ...) are elided
     plugins/wolfram.py --hash < cell.wl          digest of a single/first cell
     plugins/wolfram.py --hash-chain < cells.wl   chained digests; separate
                                                  cells with a line of just %%
@@ -884,6 +890,11 @@ def is_pure_math(text: str) -> bool:
     return re.fullmatch(r"\$[^$]+\$", text, flags=re.DOTALL) is not None
 
 
+def math_directive(text: str) -> str:
+    """Promote a whole-cell $...$ equation to display math."""
+    return ":::{math}\n" + text.strip("$").strip() + "\n:::"
+
+
 def clean_prose(text: str) -> str:
     r"""Replace common \[Name] literals with unicode in prose cells."""
     return re.sub(
@@ -904,10 +915,13 @@ def cells_to_markdown(cells: list[dict[str, str]], title: str | None) -> str:
 
     Headings, prose (Text), and lists (Item) convert directly; code cells
     become {wolfram} directives (add a (* #| deploy/label *) marker to the ones
-    you want deployed); typeset equations and unknown styles are emitted with a
-    TODO comment for hand review, never silently dropped — except opaque
-    graphics/data payloads (GraphicsBox, CompressedData, ...), whose arguments
-    are replaced by a comment saying what was omitted.
+    you want deployed). TeXAssistantTemplate equations arrive from the
+    extraction driver as $...$ LaTeX: mixed into prose they stay inline, and a
+    cell that is nothing but an equation is promoted to a :::{math} block.
+    Typeset equations and unknown styles are emitted with a TODO comment for
+    hand review, never silently dropped — except opaque graphics/data payloads
+    (GraphicsBox, CompressedData, ...), whose arguments are replaced by a
+    comment saying what was omitted.
     """
     blocks: list[str] = []
     title_consumed = title is not None
@@ -936,11 +950,12 @@ def cells_to_markdown(cells: list[dict[str, str]], title: str | None) -> str:
             else:
                 blocks.append(item)
         elif style == "Text":
-            blocks.append(clean_prose(text))
+            # A cell that is only an equation becomes display math; TeX mixed
+            # into a sentence stays inline $...$.
+            blocks.append(math_directive(text) if is_pure_math(text) else clean_prose(text))
         elif style in CODE_STYLES:
             if is_pure_math(text):
-                # A TeX-assistant equation cell, not code: emit display math.
-                blocks.append(":::{math}\n" + text.strip("$").strip() + "\n:::")
+                blocks.append(math_directive(text))
             elif is_typeset(text):
                 blocks.append(
                     "<!-- TODO: typeset cell from the notebook — convert to LaTeX "

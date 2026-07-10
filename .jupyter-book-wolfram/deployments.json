@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "deployments": {
+    "1607c5a1805297df": {
+      "url": "https://www.wolframcloud.com/obj/gvarnavi/myst-widgets/wolfram-1607c5a1805297df",
+      "cloudPath": "myst-widgets/wolfram-1607c5a1805297df",
+      "deployed": "2026-07-10T12:54:40+00:00",
+      "code": "(*#|deploy*)\nWith[{g = 1, \\[Theta]0 = \\[Pi]/12},\n Animate[Show[\n   Table[\n    visualizePendulum[length][\n     smallDisplacementSymbolicSolution[\\[Theta]0, g, length][\n      t]], {length, Subdivide[1/2, 1, 10]}]\n   ], {t, 0, 60}, AnimationRate -> 5, AnimationRunning -> False,\n  Paneled -> False]\n ]"
+    },
+    "510dcd0fb659359f": {
+      "url": "https://www.wolframcloud.com/obj/gvarnavi/myst-widgets/wolfram-510dcd0fb659359f",
+      "cloudPath": "myst-widgets/wolfram-510dcd0fb659359f",
+      "deployed": "2026-07-10T12:54:40+00:00",
+      "code": "(*#|deploy*)\nWith[{g = 1, \\[Theta]0 = \\[Pi]/12, L = 1},\n Animate[\n  visualizePendulum[L][\n   smallDisplacementSymbolicSolution[\\[Theta]0, g, L][t]], {t, 0, 60},\n   AnimationRate -> 5, AnimationRunning -> False, Paneled -> False]\n ]"
+    }
+  }
+}

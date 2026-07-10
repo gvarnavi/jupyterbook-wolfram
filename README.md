@@ -64,6 +64,11 @@ The conversion is best-effort and made for hand-finishing:
 - **Opaque payloads** (`GraphicsBox`, `CompressedData`, `FrameBox`, and friends) are elided and replaced with a comment saying what was omitted — pasted graphics can be tens of kilobytes of box data that no human should scroll past.
 - Typeset cells and unknown styles are kept under a `<!-- TODO -->` comment for review, never silently dropped.
 
+Two fixture notebooks exercise these conversions and make handy references:
+
+- `notebooks/classical_mechanics_with_test_cases.nb` — TeX-assistant equations (standalone and inline) plus Code/initialization cells deliberately out of dependency order.
+- `notebooks/example_with_latex_in_cell.nb` — a TeX-assistant equation embedded inline in a heading cell.
+
 ## Repository layout
 
 | Path | What it is |
@@ -72,7 +77,7 @@ The conversion is best-effort and made for hand-finishing:
 | `plugins/wolfram.py` | Directives, transform, deploy logic, and authoring CLI |
 | `widgets/wolfram-notebook.mjs` | Client-side anywidget renderer |
 | `.jupyter-book-wolfram/deployments.json` | Committed manifest of deployed cloud objects |
-| `notebooks/` | Source `.nb` notebooks for scaffolding/embedding |
+| `notebooks/` | Source `.nb` notebooks for scaffolding/embedding, including scaffold test fixtures |
 | `01.classical_mechanics.md` | Example chapter |
 
 ## Environment variables

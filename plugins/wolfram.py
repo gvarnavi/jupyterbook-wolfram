@@ -77,6 +77,32 @@ HEADING_DEPTH = {"Title": 1, "Chapter": 1, "Section": 2, "Subsection": 3, "Subsu
 LIST_MARKERS = {"Item": "- ", "ItemNumbered": "1. ", "Subitem": "  - ", "SubitemNumbered": "  1. "}
 CODE_STYLES = {"Input", "Code", "Program"}
 
+# Box/data heads whose bracketed payload is opaque to a human editor: pasted
+# graphics, compressed arrays, and front-end container/decoration boxes
+# (FrameBox and friends). --scaffold elides their contents from every
+# non-runnable cell (prose, headings, typeset/unknown TODO cells), leaving a
+# comment in place of the blob; runnable code cells are never touched.
+ELIDE_HEADS = (
+    "GraphicsBox",
+    "Graphics3DBox",
+    "GraphicsComplexBox",
+    "RasterBox",
+    "ImageBox",
+    "CompressedData",
+    "BinarySerialize",
+    "FrameBox",
+    "ButtonBox",
+    "TemplateBox",
+    "TagBox",
+    "TooltipBox",
+    "PanelBox",
+    "PaneBox",
+    "DynamicBox",
+    "DynamicModuleBox",
+    "InterpretationBox",
+)
+ELIDE_RE = re.compile(r"\b(" + "|".join(ELIDE_HEADS) + r")\[")
+
 # Common WL named characters -> unicode, for prose cells (the front end leaves
 # \[Name] literals in exported text). Unknown names are left as-is for review.
 WL_NAMED_CHARS = {
@@ -791,6 +817,54 @@ def extract_cells(nb_path: Path) -> list[dict[str, str]]:
     raise SystemExit("wolframscript produced no cell data (no MYST_WOLFRAM_CELLS line)")
 
 
+def matching_bracket(text: str, open_index: int) -> int | None:
+    """Index of the ] closing text[open_index] == '[', skipping WL strings."""
+    depth = 0
+    i = open_index
+    n = len(text)
+    while i < n:
+        char = text[i]
+        if char == '"':
+            i += 1
+            while i < n and text[i] != '"':
+                i += 2 if text[i] == "\\" else 1
+            if i >= n:
+                return None
+        elif char == "[":
+            depth += 1
+        elif char == "]":
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
+    return None
+
+
+def elide_box_data(text: str) -> str:
+    """Replace the argument of GraphicsBox/CompressedData/... with a comment.
+
+    Pasted graphics and compressed arrays are huge and meaningless to a human
+    editor; the elision comment says what was dropped so the author knows to
+    re-create the content (or fetch it from the original notebook).
+    """
+    parts: list[str] = []
+    pos = 0
+    while (match := ELIDE_RE.search(text, pos)) is not None:
+        close = matching_bracket(text, match.end() - 1)
+        if close is None:  # unbalanced (truncated export): leave it untouched
+            break
+        head = match.group(1)
+        inner = text[match.end() : close]
+        parts.append(text[pos : match.end()])
+        if inner.startswith("(*") and inner.rstrip().endswith("*)"):
+            parts.append(inner + "]")  # already elided: keep the comment as-is
+        else:
+            parts.append(f"(* {head} contents omitted: {len(inner):,} characters *)]")
+        pos = close + 1
+    parts.append(text[pos:])
+    return "".join(parts)
+
+
 def is_typeset(text: str) -> bool:
     r"""Typeset display cells (\!\(TraditionalForm...\)) are not runnable code."""
     return text.lstrip().startswith("\\!\\(")
@@ -817,7 +891,9 @@ def cells_to_markdown(cells: list[dict[str, str]], title: str | None) -> str:
     Headings, prose (Text), and lists (Item) convert directly; code cells
     become {wolfram} directives (add a (* #| deploy/label *) marker to the ones
     you want deployed); typeset equations and unknown styles are emitted with a
-    TODO comment for hand review, never silently dropped.
+    TODO comment for hand review, never silently dropped — except opaque
+    graphics/data payloads (GraphicsBox, CompressedData, ...), whose arguments
+    are replaced by a comment saying what was omitted.
     """
     blocks: list[str] = []
     title_consumed = title is not None
@@ -827,6 +903,10 @@ def cells_to_markdown(cells: list[dict[str, str]], title: str | None) -> str:
         text = (cell.get("text") or "").strip()
         if not text:
             continue
+        # Runnable code keeps its exact source; everything else sheds opaque
+        # box/data payloads before it reaches the page.
+        if style not in CODE_STYLES or is_typeset(text):
+            text = elide_box_data(text)
 
         if style in HEADING_DEPTH:
             if not title_consumed and HEADING_DEPTH[style] == 1:
@@ -846,7 +926,8 @@ def cells_to_markdown(cells: list[dict[str, str]], title: str | None) -> str:
         elif style in CODE_STYLES:
             if is_typeset(text):
                 blocks.append(
-                    "<!-- TODO: typeset equation from the notebook — convert to LaTeX -->\n"
+                    "<!-- TODO: typeset cell from the notebook — convert to LaTeX "
+                    "or re-create as code -->\n"
                     "```wl\n" + text + "\n```"
                 )
             else:

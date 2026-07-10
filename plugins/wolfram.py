@@ -123,8 +123,16 @@ WL_NAMED_CHARS = {
 # wolframscript driver: read a .nb, emit ordered {style, text} cells as JSON.
 # Uses the front end (UsingFrontEnd) to export each cell's exact source text;
 # Output cells are dropped. __PATH__/__MARKER__ are substituted from Python.
+# TeXAssistantTemplate boxes carry their LaTeX source in the "input" key of
+# their Association argument; they are replaced with that TeX (as $...$ inline
+# math) before export, which would otherwise flatten them into raw graphics.
 EXTRACT_DRIVER = r"""
 nb = Get[__PATH__];
+tex[a_] := "$" <> a["input"] <> "$";
+texQ[a_] := AssociationQ[a] && StringQ[a["input"]];
+nb = nb /. Cell[BoxData[FormBox[
+      TemplateBox[a_?texQ, "TeXAssistantTemplate", ___], ___]], ___] :> tex[a];
+nb = nb /. TemplateBox[a_?texQ, "TeXAssistantTemplate", ___] :> tex[a];
 cells = Cases[nb, Cell[c_, s_String, ___] :> {s, Cell[c, s]}, Infinity];
 cells = Select[cells, #[[1]] =!= "Output" &];
 export[cell_] := Quiet@Check[First[MathLink`CallFrontEnd[
@@ -870,6 +878,12 @@ def is_typeset(text: str) -> bool:
     return text.lstrip().startswith("\\!\\(")
 
 
+def is_pure_math(text: str) -> bool:
+    """A cell that is exactly one $...$ (a substituted TeXAssistantTemplate);
+    a lone WL symbol like $Version never matches (no closing dollar)."""
+    return re.fullmatch(r"\$[^$]+\$", text, flags=re.DOTALL) is not None
+
+
 def clean_prose(text: str) -> str:
     r"""Replace common \[Name] literals with unicode in prose cells."""
     return re.sub(
@@ -924,7 +938,10 @@ def cells_to_markdown(cells: list[dict[str, str]], title: str | None) -> str:
         elif style == "Text":
             blocks.append(clean_prose(text))
         elif style in CODE_STYLES:
-            if is_typeset(text):
+            if is_pure_math(text):
+                # A TeX-assistant equation cell, not code: emit display math.
+                blocks.append(":::{math}\n" + text.strip("$").strip() + "\n:::")
+            elif is_typeset(text):
                 blocks.append(
                     "<!-- TODO: typeset cell from the notebook — convert to LaTeX "
                     "or re-create as code -->\n"
@@ -935,7 +952,9 @@ def cells_to_markdown(cells: list[dict[str, str]], title: str | None) -> str:
         else:
             blocks.append(f"<!-- TODO: unsupported cell style '{style}' -->\n" + text)
 
-    frontmatter = f"---\ntitle: {title or 'Untitled'}\n---"
+    # json.dumps yields a valid YAML double-quoted scalar (colons, backslashes).
+    title = " ".join((title or "Untitled").split())
+    frontmatter = f"---\ntitle: {json.dumps(title, ensure_ascii=False)}\n---"
     return frontmatter + "\n\n" + "\n\n".join(blocks) + "\n"
 
 

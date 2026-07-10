@@ -59,6 +59,7 @@ The conversion is best-effort and made for hand-finishing:
 
 - Headings, prose, and list cells become markdown; the first title/chapter heading becomes the page title.
 - Code cells become `{wolfram}` directives — add a `(* #| deploy/label *)` marker to the ones you want deployed.
+- **Code-style cells and Input cells marked `InitializationCell->True`** are hoisted to the top of the page as `:echo: false` directives: they run in the page's kernel session but don't appear on the page. They are ordered least-dependent first (a lexical heuristic on defined/used symbols; notebook order breaks ties).
 - **TeX-assistant equations** (`TemplateBox[..., "TeXAssistantTemplate"]`) are replaced with their LaTeX source: inline `$...$` when mixed into a sentence, a `:::{math}` block when the equation is the entire cell.
 - **Opaque payloads** (`GraphicsBox`, `CompressedData`, `FrameBox`, and friends) are elided and replaced with a comment saying what was omitted — pasted graphics can be tens of kilobytes of box data that no human should scroll past.
 - Typeset cells and unknown styles are kept under a `<!-- TODO -->` comment for review, never silently dropped.

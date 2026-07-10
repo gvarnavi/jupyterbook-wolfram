@@ -33,7 +33,12 @@ Authoring helpers (no MyST involved):
                                                  blocks for equation-only
                                                  cells); opaque box payloads
                                                  (GraphicsBox, CompressedData,
-                                                 FrameBox, ...) are elided
+                                                 FrameBox, ...) are elided;
+                                                 Code cells and Input cells
+                                                 marked InitializationCell are
+                                                 hoisted to the top as hidden
+                                                 (:echo: false) setup cells,
+                                                 least-dependent first
     plugins/wolfram.py --hash < cell.wl          digest of a single/first cell
     plugins/wolfram.py --hash-chain < cells.wl   chained digests; separate
                                                  cells with a line of just %%
@@ -139,13 +144,15 @@ texQ[a_] := AssociationQ[a] && StringQ[a["input"]];
 nb = nb /. Cell[BoxData[FormBox[
       TemplateBox[a_?texQ, "TeXAssistantTemplate", ___], ___]], ___] :> tex[a];
 nb = nb /. TemplateBox[a_?texQ, "TeXAssistantTemplate", ___] :> tex[a];
-cells = Cases[nb, Cell[c_, s_String, ___] :> {s, Cell[c, s]}, Infinity];
-cells = Select[cells, #[[1]] =!= "Output" &];
+cells = Cases[nb, c : Cell[_, _String, ___] :> c, Infinity];
+cells = Select[cells, #[[2]] =!= "Output" &];
 export[cell_] := Quiet@Check[First[MathLink`CallFrontEnd[
-  FrontEnd`ExportPacket[Append[cell, PageWidth -> Infinity], "InputText"]]], $Failed];
+  FrontEnd`ExportPacket[Cell[cell[[1]], cell[[2]], PageWidth -> Infinity],
+    "InputText"]]], $Failed];
 data = UsingFrontEnd[
-  Table[With[{txt = export[cells[[i, 2]]]},
-    <|"style" -> cells[[i, 1]], "text" -> If[StringQ[txt], txt, ""]|>],
+  Table[With[{cell = cells[[i]], txt = export[cells[[i]]]},
+    <|"style" -> cell[[2]], "text" -> If[StringQ[txt], txt, ""],
+      "init" -> MemberQ[List @@ cell, InitializationCell -> True]|>],
     {i, Length[cells]}]];
 Print["__MARKER__" <> ExportString[data, "RawJSON", "Compact" -> True]];
 """
@@ -904,10 +911,65 @@ def clean_prose(text: str) -> str:
     )
 
 
-def wolfram_directive(code: str) -> str:
+def wolfram_directive(code: str, echo: bool = True) -> str:
     # Blank line after the options terminates directive-option parsing, so the
     # WL body is taken verbatim (any (* #| ... *) marker in it is preserved).
-    return ":::{wolfram}\n:echo: true\n\n" + code.strip() + "\n:::"
+    flag = "true" if echo else "false"
+    return ":::{wolfram}\n:echo: " + flag + "\n\n" + code.strip() + "\n:::"
+
+
+# Dependency ordering for hoisted initialization cells: a lexical heuristic
+# (no kernel). Strings and comments are scrubbed, definitions are LHS symbols
+# of = / := assignments, and cell B depends on cell A when B mentions a symbol
+# A defines. Ties and cycles fall back to notebook order.
+WL_COMMENT_RE = re.compile(r"\(\*(?:[^*]|\*(?!\)))*\*\)", re.DOTALL)
+WL_STRING_RE = re.compile(r'"(?:[^"\\]|\\.)*"', re.DOTALL)
+WL_SYMBOL_RE = re.compile(r"[A-Za-z$][A-Za-z0-9$]*")
+WL_DEF_RE = re.compile(
+    r"([A-Za-z$][A-Za-z0-9$]*)"  # head symbol
+    r"((?:\s*\[(?:[^\[\]]|\[[^\[\]]*\])*\])*)"  # arg brackets, depth <= 2
+    r"\s*(?::=|=(?![=!]))"  # = or :=, but not == or =!=
+)
+# For these heads the defined symbol is the first argument, not the head.
+WL_DEF_WRAPPERS = {"Options", "Attributes", "Format", "Default", "MessageName"}
+
+
+def scrub_wl(code: str) -> str:
+    return WL_STRING_RE.sub(" ", WL_COMMENT_RE.sub(" ", code))
+
+
+def wl_definitions(code: str) -> set[str]:
+    defined: set[str] = set()
+    for match in WL_DEF_RE.finditer(scrub_wl(code)):
+        name, args = match.group(1), match.group(2)
+        if name in WL_DEF_WRAPPERS:
+            inner = WL_SYMBOL_RE.search(args)
+            if inner:
+                defined.add(inner.group(0))
+        else:
+            defined.add(name)
+    return defined
+
+
+def dependency_order(codes: list[str]) -> list[int]:
+    """Stable topological order: least-dependent cells first."""
+    defined = [wl_definitions(code) for code in codes]
+    used = [set(WL_SYMBOL_RE.findall(scrub_wl(code))) for code in codes]
+    needs = [
+        {j for j in range(len(codes)) if j != i and used[i] & defined[j]}
+        for i in range(len(codes))
+    ]
+    order: list[int] = []
+    placed: set[int] = set()
+    remaining = list(range(len(codes)))
+    while remaining:
+        # First cell whose dependencies are all placed; on a cycle, fall back
+        # to the earliest remaining cell so notebook order breaks the tie.
+        pick = next((i for i in remaining if needs[i] <= placed), remaining[0])
+        order.append(pick)
+        placed.add(pick)
+        remaining.remove(pick)
+    return order
 
 
 def cells_to_markdown(cells: list[dict[str, str]], title: str | None) -> str:
@@ -915,18 +977,36 @@ def cells_to_markdown(cells: list[dict[str, str]], title: str | None) -> str:
 
     Headings, prose (Text), and lists (Item) convert directly; code cells
     become {wolfram} directives (add a (* #| deploy/label *) marker to the ones
-    you want deployed). TeXAssistantTemplate equations arrive from the
-    extraction driver as $...$ LaTeX: mixed into prose they stay inline, and a
-    cell that is nothing but an equation is promoted to a :::{math} block.
-    Typeset equations and unknown styles are emitted with a TODO comment for
-    hand review, never silently dropped — except opaque graphics/data payloads
-    (GraphicsBox, CompressedData, ...), whose arguments are replaced by a
-    comment saying what was omitted.
+    you want deployed). Code-style cells and Input cells marked
+    InitializationCell->True are hoisted to the top of the page as
+    :echo: false directives — evaluated in the page session but not shown —
+    ordered least-dependent first (lexical heuristic; notebook order breaks
+    ties). TeXAssistantTemplate equations arrive from the extraction driver as
+    $...$ LaTeX: mixed into prose they stay inline, and a cell that is nothing
+    but an equation is promoted to a :::{math} block. Typeset equations and
+    unknown styles are emitted with a TODO comment for hand review, never
+    silently dropped — except opaque graphics/data payloads (GraphicsBox,
+    CompressedData, ...), whose arguments are replaced by a comment saying
+    what was omitted.
     """
-    blocks: list[str] = []
+    init_codes: list[str] = []
+    body_cells: list[dict[str, str]] = []
+    for cell in cells:
+        style = cell.get("style", "")
+        text = (cell.get("text") or "").strip()
+        hoist = style == "Code" or (style in CODE_STYLES and cell.get("init"))
+        if text and hoist and not is_typeset(text) and not is_pure_math(text):
+            init_codes.append(text)
+        else:
+            body_cells.append(cell)
+
+    blocks = [
+        wolfram_directive(init_codes[i], echo=False)
+        for i in dependency_order(init_codes)
+    ]
     title_consumed = title is not None
 
-    for cell in cells:
+    for cell in body_cells:
         style = cell.get("style", "")
         text = (cell.get("text") or "").strip()
         if not text:

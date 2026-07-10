@@ -1,6 +1,12 @@
 {
   "version": 1,
   "deployments": {
+    "03aa194619db32bd": {
+      "url": "https://www.wolframcloud.com/obj/ccarter/myst-widgets/wolfram-03aa194619db32bd",
+      "cloudPath": "myst-widgets/wolfram-03aa194619db32bd",
+      "deployed": "2026-07-10T13:36:24+00:00",
+      "code": "(*#|deploy*)\nWith[{g = 1, \\[Theta]0 = \\[Pi]/12},\n Animate[Show[\n   Table[\n    visualizePendulum[length][\n     smallDisplacementSymbolicSolution[\\[Theta]0, g, length][\n      t]], {length, Subdivide[1/2, 1, 10]}]\n   ], {t, 0, 60}, AnimationRate -> 5, AnimationRunning -> False,\n  Paneled -> False]\n ]"
+    },
     "1607c5a1805297df": {
       "url": "https://www.wolframcloud.com/obj/gvarnavi/myst-widgets/wolfram-1607c5a1805297df",
       "cloudPath": "myst-widgets/wolfram-1607c5a1805297df",
@@ -12,6 +18,30 @@
       "cloudPath": "myst-widgets/wolfram-510dcd0fb659359f",
       "deployed": "2026-07-10T12:54:40+00:00",
       "code": "(*#|deploy*)\nWith[{g = 1, \\[Theta]0 = \\[Pi]/12, L = 1},\n Animate[\n  visualizePendulum[L][\n   smallDisplacementSymbolicSolution[\\[Theta]0, g, L][t]], {t, 0, 60},\n   AnimationRate -> 5, AnimationRunning -> False, Paneled -> False]\n ]"
+    },
+    "6495be45e56f2560": {
+      "url": "https://www.wolframcloud.com/obj/ccarter/myst-widgets/wolfram-6495be45e56f2560",
+      "cloudPath": "myst-widgets/wolfram-6495be45e56f2560",
+      "deployed": "2026-07-10T13:17:06+00:00",
+      "code": "(*#|deploy*)\nWith[{g = 1, \\[Theta]0 = \\[Pi]/12},\n Animate[Show[\n   Table[\n    visualizePendulum[length][\n     smallDisplacementSymbolicSolution[\\[Theta]0, g, length][\n      t]], {length, Subdivide[1/2, 1, 10]}]\n   ], {t, 0, 60}, AnimationRate -> 5, AnimationRunning -> False,\n  Paneled -> False]\n ]"
+    },
+    "808822b037d58711": {
+      "url": "https://www.wolframcloud.com/obj/ccarter/myst-widgets/wolfram-808822b037d58711",
+      "cloudPath": "myst-widgets/wolfram-808822b037d58711",
+      "deployed": "2026-07-10T13:36:24+00:00",
+      "code": "(*#|deploy*)\nWith[{g = 1, \\[Theta]0 = \\[Pi]/12, L = 1},\n Animate[\n  visualizePendulum[L][\n   smallDisplacementSymbolicSolution[\\[Theta]0, g, L][t]], {t, 0, 60},\n   AnimationRate -> 5, AnimationRunning -> False, Paneled -> False]\n ]"
+    },
+    "8c36ca18775408a5": {
+      "url": "https://www.wolframcloud.com/obj/ccarter/myst-widgets/wolfram-8c36ca18775408a5",
+      "cloudPath": "myst-widgets/wolfram-8c36ca18775408a5",
+      "deployed": "2026-07-10T13:17:06+00:00",
+      "code": "(*#|deploy*)\nWith[{g = 1, \\[Theta]0 = \\[Pi]/12, L = 1},\n Animate[\n  visualizePendulum[L][\n   smallDisplacementSymbolicSolution[\\[Theta]0, g, L][t]], {t, 0, 60},\n   AnimationRate -> 5, AnimationRunning -> False, Paneled -> False]\n ]"
+    },
+    "b02e5129c3669ad7": {
+      "url": "https://www.wolframcloud.com/obj/ccarter/myst-widgets/wolfram-b02e5129c3669ad7",
+      "cloudPath": "myst-widgets/wolfram-b02e5129c3669ad7",
+      "deployed": "2026-07-10T13:44:20+00:00",
+      "code": "(*#|deploy*)\nWith[{\\[Gamma]Func = \\[Gamma] @@ vars},\n DynamicModule[\n  {gammaPoints, length = 64},\n  Manipulate[\n   gammaPoints =\n    Evaluate[(\\[Gamma]Func)] /@ Range[0, 2 \\[Pi], (2 \\[Pi])/127];\n   Graphics[{Red, BSplineCurve[gammaPoints], Gray,\n     bisector[#, \"Show Bisectors\" -> showBisectors] & /@\n      gammaPoints[[1 ;; n ;; 2]]}],\n   Evaluate[Sequence @@ controls],\n   {{n, 4, \"Normal Vector\"}, 1, 128, 8},\n   {{showBisectors, False, \"Show Bisectors\"}, {False, True}}\n   ]\n  ]\n ]"
     }
   }
 }
